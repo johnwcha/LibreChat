@@ -6,6 +6,41 @@ import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import compression from 'vite-plugin-compression';
 import type { Plugin } from 'vite';
 
+const APP_TITLE = 'WCU gpt';
+const APP_SHORT_NAME = 'WCU gpt';
+// Custom title transform plugin
+const titleTransform = (): Plugin => ({
+  name: 'title-transform',
+  transformIndexHtml(html) {
+    // Replace both the title tag and any script that might modify it
+    return html
+      .replace(
+        /<title>.*?<\/title>/,
+        `<title>${APP_TITLE}</title>`
+      )
+      .replace(
+        /<meta name="description".*?>/,
+        `<meta name="description" content="${APP_TITLE} - AI Chat Interface">`
+      )
+      .replace(
+        /<script.*?>.*?document\.title.*?<\/script>/g,
+        ''
+      )
+      // Add our own title setter
+      .replace(
+        '</head>',
+        `<script>
+          (function() {
+            const originalTitle = document.title;
+            Object.defineProperty(document, 'title', {
+              get: function() { return originalTitle; },
+              set: function() { return originalTitle; }
+            });
+          })();
+        </script></head>`
+      );
+  }
+});
 // https://vitejs.dev/config/
 export default defineConfig({
   server: {
@@ -27,8 +62,29 @@ export default defineConfig({
   envDir: '../',
   envPrefix: ['VITE_', 'SCRIPT_', 'DOMAIN_', 'ALLOW_'],
   plugins: [
+    titleTransform(),
     react(),
-    nodePolyfills(),
+    nodePolyfills({
+      // Explicitly enable crypto polyfill
+      protocolImports: true,
+      globals: {
+        crypto: true
+      }
+    }),
+    {
+      name: 'html-transform',
+      transformIndexHtml(html) {
+        return html
+          .replace(
+            /<title>(.*?)<\/title>/,
+            `<title>${APP_TITLE}</title>`
+          )
+          .replace(
+            /<meta name="description" content=".*?">/,
+            `<meta name="description" content="${APP_TITLE} - AI Chat Interface">`
+          );
+      },
+    },
     VitePWA({
       injectRegister: 'auto', // 'auto' | 'manual' | 'disabled'
       registerType: 'autoUpdate', // 'prompt' | 'autoUpdate'
@@ -44,8 +100,8 @@ export default defineConfig({
       },
       includeAssets: ['**/*'],
       manifest: {
-        name: 'LibreChat',
-        short_name: 'LibreChat',
+        name: APP_TITLE,
+        short_name: APP_SHORT_NAME,
         start_url: '/',
         display: 'standalone',
         background_color: '#000000',
@@ -160,7 +216,16 @@ export default defineConfig({
     alias: {
       '~': path.join(__dirname, 'src/'),
       $fonts: resolve('public/fonts'),
+      crypto: 'crypto-browserify'
     },
+  },
+  optimizeDeps: {
+    esbuildOptions: {
+      define: {
+        global: 'globalThis'
+      }
+    },
+    include: ['crypto-browserify']
   },
 });
 
